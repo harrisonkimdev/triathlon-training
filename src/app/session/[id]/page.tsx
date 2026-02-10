@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { db, timestampToDate } from '@/lib/firebase'
+import type { Session } from '@/lib/firebase'
 import { doc, getDoc } from 'firebase/firestore'
 import { ShareCard } from '@/components/ShareCard'
 import { ShareButton } from '@/components/ShareButton'
@@ -23,12 +24,14 @@ export default async function SessionPage({ params }: Props) {
     id: sessionSnap.id,
     ...sessionData,
     createdAt: timestampToDate(sessionData.createdAt),
-  }
+  } as Session
 
   // User data is denormalized in session
   const user = {
     id: session.userId,
     name: session.userName,
+    nameLower: session.userName.toLowerCase(),
+    createdAt: session.createdAt,
     created_at: session.createdAt.toISOString(),
   }
 
@@ -57,6 +60,12 @@ export default async function SessionPage({ params }: Props) {
           </button>
         </Link>
       </div>
+
+      <Link href={`/session/${id}/edit`}>
+        <button className="w-full h-10 border border-blue-200 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50">
+          Edit Session
+        </button>
+      </Link>
     </div>
   )
 }
