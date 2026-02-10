@@ -1,7 +1,7 @@
 'use client'
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import type { Session } from '@/lib/supabase'
+import type { Session } from '@/lib/firebase'
 
 interface ProgressChartProps {
   sessions: Session[]
@@ -9,13 +9,13 @@ interface ProgressChartProps {
 
 export function ProgressChart({ sessions }: ProgressChartProps) {
   const data = [...sessions]
-    .sort((a, b) => a.session_date.localeCompare(b.session_date))
+    .sort((a, b) => a.sessionDate.localeCompare(b.sessionDate))
     .map((s) => ({
-      date: s.session_date,
+      date: s.sessionDate,
       Score: s.score,
-      Swimming: s.swimming_meters,
-      Biking: Math.round(s.biking_km * 10) / 10,
-      Running: Math.round(s.running_km * 10) / 10,
+      Swimming: s.swimmingMeters,
+      Biking: Math.round(s.bikingKm * 10) / 10,
+      Running: Math.round(s.runningKm * 10) / 10,
     }))
 
   if (data.length === 0) {

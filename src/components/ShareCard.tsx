@@ -1,4 +1,4 @@
-import type { Session, User } from '@/lib/supabase'
+import type { Session, User } from '@/lib/firebase'
 import { formatScore } from '@/lib/scoring'
 
 interface ShareCardProps {
@@ -15,21 +15,21 @@ export function ShareCard({ session, user }: ShareCardProps) {
       <div className="text-center mb-4">
         <div className="text-sm opacity-80">Triathlon Training</div>
         <div className="text-xl font-bold mt-1">{user.name}</div>
-        <div className="text-sm opacity-70">{session.session_date}</div>
+        <div className="text-sm opacity-70">{session.sessionDate}</div>
       </div>
 
       <div className="space-y-2 mb-4">
         <div className="flex justify-between items-center bg-white/20 rounded-lg px-4 py-2">
           <span>🏊 Swimming</span>
-          <span className="font-bold">{session.swimming_meters}m</span>
+          <span className="font-bold">{session.swimmingMeters}m</span>
         </div>
         <div className="flex justify-between items-center bg-white/20 rounded-lg px-4 py-2">
           <span>🚴 Biking</span>
-          <span className="font-bold">{session.biking_km.toFixed(1)} km</span>
+          <span className="font-bold">{session.bikingKm.toFixed(1)} km</span>
         </div>
         <div className="flex justify-between items-center bg-white/20 rounded-lg px-4 py-2">
           <span>🏃 Running</span>
-          <span className="font-bold">{session.running_km.toFixed(1)} km</span>
+          <span className="font-bold">{session.runningKm.toFixed(1)} km</span>
         </div>
       </div>
 

@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { UnitToggle } from '@/components/UnitToggle'
 import { calcScore, milesToKm, formatScore } from '@/lib/scoring'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/firebase'
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 
 export function ScoreForm() {
   const router = useRouter()
@@ -37,35 +38,50 @@ export function ScoreForm() {
     setError('')
 
     try {
-      const { data: user, error: userErr } = await supabase
-        .from('users')
-        .upsert({ name: name.trim() }, { onConflict: 'name' })
-        .select()
-        .single()
+      // Upsert user using case-insensitive lookup
+      const userName = name.trim()
+      const userNameLower = userName.toLowerCase()
 
-      if (userErr) throw userErr
+      const usersRef = collection(db, 'users')
+      const q = query(usersRef, where('nameLower', '==', userNameLower))
+      const userSnapshot = await getDocs(q)
 
+      let userId: string
+
+      if (userSnapshot.empty) {
+        // Create new user
+        const newUserRef = await addDoc(usersRef, {
+          name: userName,
+          nameLower: userNameLower,
+          createdAt: serverTimestamp(),
+        })
+        userId = newUserRef.id
+      } else {
+        // Use existing user
+        userId = userSnapshot.docs[0].id
+      }
+
+      // Calculate values
       const swim = parseFloat(swimming) || 0
       const bike = parseFloat(biking) || 0
       const run = parseFloat(running) || 0
       const bikeKm = unit === 'miles' ? milesToKm(bike) : bike
       const runKm = unit === 'miles' ? milesToKm(run) : run
 
-      const { data: session, error: sessionErr } = await supabase
-        .from('sessions')
-        .insert({
-          user_id: user.id,
-          swimming_meters: swim,
-          biking_km: bikeKm,
-          running_km: runKm,
-          score: calcScore(swim, bikeKm, runKm),
-        })
-        .select()
-        .single()
+      // Insert session
+      const sessionsRef = collection(db, 'sessions')
+      const sessionDoc = await addDoc(sessionsRef, {
+        userId,
+        userName,
+        swimmingMeters: swim,
+        bikingKm: bikeKm,
+        runningKm: runKm,
+        score: calcScore(swim, bikeKm, runKm),
+        sessionDate: new Date().toISOString().split('T')[0],
+        createdAt: serverTimestamp(),
+      })
 
-      if (sessionErr) throw sessionErr
-
-      router.push(`/session/${session.id}`)
+      router.push(`/session/${sessionDoc.id}`)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save session')
     } finally {

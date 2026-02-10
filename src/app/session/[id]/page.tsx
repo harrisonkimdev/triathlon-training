@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { db, timestampToDate } from '@/lib/firebase'
+import { doc, getDoc } from 'firebase/firestore'
 import { ShareCard } from '@/components/ShareCard'
 import { ShareButton } from '@/components/ShareButton'
 
@@ -11,15 +12,25 @@ interface Props {
 export default async function SessionPage({ params }: Props) {
   const { id } = await params
 
-  const { data: session } = await supabase
-    .from('sessions')
-    .select('*, users(*)')
-    .eq('id', id)
-    .single()
+  // Get session by ID
+  const sessionRef = doc(db, 'sessions', id)
+  const sessionSnap = await getDoc(sessionRef)
 
-  if (!session) notFound()
+  if (!sessionSnap.exists()) notFound()
 
-  const user = session.users as { id: string; name: string; created_at: string }
+  const sessionData = sessionSnap.data()
+  const session = {
+    id: sessionSnap.id,
+    ...sessionData,
+    createdAt: timestampToDate(sessionData.createdAt),
+  }
+
+  // User data is denormalized in session
+  const user = {
+    id: session.userId,
+    name: session.userName,
+    created_at: session.createdAt.toISOString(),
+  }
 
   return (
     <div className="max-w-md mx-auto p-6 space-y-4">

@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read/write for users
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if false; // Prevent name changes after creation
+      allow delete: if false; // Prevent user deletion via client
+    }
+
+    // Public read/write for sessions
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if false; // Sessions are immutable after creation
+      allow delete: if false; // Prevent session deletion via client
+    }
+  }
+}

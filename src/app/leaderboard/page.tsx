@@ -1,25 +1,41 @@
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { db, timestampToDate } from '@/lib/firebase'
+import { collection, getDocs } from 'firebase/firestore'
 import { formatScore } from '@/lib/scoring'
 
 export default async function LeaderboardPage() {
-  // Get all users with their best score and total sessions
-  const { data: users = [] } = await supabase.from('users').select('id, name')
+  // Optimization: Get all sessions in one query instead of N+1
+  const sessionsRef = collection(db, 'sessions')
+  const sessionsSnapshot = await getDocs(sessionsRef)
 
-  const userStats = await Promise.all(
-    (users ?? []).map(async (user) => {
-      const { data: sessions = [] } = await supabase
-        .from('sessions')
-        .select('score, swimming_meters, biking_miles, running_miles, session_date')
-        .eq('user_id', user.id)
+  // Group sessions by user
+  const userSessionsMap = new Map<string, any[]>()
 
-      const bestScore = Math.max(...(sessions ?? []).map((s) => s.score), 0)
-      const totalScore = (sessions ?? []).reduce((a, s) => a + s.score, 0)
-      const count = sessions?.length ?? 0
+  sessionsSnapshot.docs.forEach((doc) => {
+    const sessionData = doc.data()
+    const userId = sessionData.userId
+    const userName = sessionData.userName
 
-      return { ...user, bestScore, totalScore, count }
+    if (!userSessionsMap.has(userId)) {
+      userSessionsMap.set(userId, [])
+    }
+
+    userSessionsMap.get(userId)!.push({
+      id: doc.id,
+      ...sessionData,
+      createdAt: timestampToDate(sessionData.createdAt),
     })
-  )
+  })
+
+  // Calculate stats per user
+  const userStats = Array.from(userSessionsMap.entries()).map(([userId, sessions]) => {
+    const bestScore = Math.max(...sessions.map((s) => s.score), 0)
+    const totalScore = sessions.reduce((a, s) => a + s.score, 0)
+    const count = sessions.length
+    const userName = sessions[0]?.userName || 'Unknown'
+
+    return { id: userId, name: userName, bestScore, totalScore, count }
+  })
 
   const ranked = userStats.sort((a, b) => b.bestScore - a.bestScore)
 
