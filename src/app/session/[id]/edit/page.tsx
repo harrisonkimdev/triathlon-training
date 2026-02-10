@@ -1,55 +1,69 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
+import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { db, timestampToDate } from '@/lib/firebase'
+import type { Session } from '@/lib/firebase'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { UnitToggle } from '@/components/UnitToggle'
-import { calcScore, milesToKm, formatScore } from '@/lib/scoring'
-import { db } from '@/lib/firebase'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { calcScore, kmToMiles, milesToKm, formatScore } from '@/lib/scoring'
 import { useAuth } from '@/context/AuthContext'
 
-export function ScoreForm() {
+export default function EditSessionPage() {
   const router = useRouter()
-  const { user, signOut } = useAuth()
-  const [swimming, setSwimming] = useState('')
-  const [biking, setBiking] = useState('')
-  const [running, setRunning] = useState('')
-  const [swimmingMins, setSwimmingMins] = useState('10')
-  const [bikingMins, setBikingMins] = useState('25')
-  const [runningMins, setRunningMins] = useState('15')
-  const [unit, setUnit] = useState<'miles' | 'km'>('miles')
-  const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0])
-  const [score, setScore] = useState(0)
+  const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const [sessionDate, setSessionDate] = useState('')
+  const [swimming, setSwimming] = useState('')
+  const [biking, setBiking] = useState('')
+  const [running, setRunning] = useState('')
+  const [swimmingMins, setSwimmingMins] = useState('')
+  const [bikingMins, setBikingMins] = useState('')
+  const [runningMins, setRunningMins] = useState('')
+  const [unit, setUnit] = useState<'miles' | 'km'>('miles')
+
+  const score = calcScore(
+    parseFloat(swimming) || 0,
+    unit === 'miles' ? milesToKm(parseFloat(biking) || 0) : (parseFloat(biking) || 0),
+    unit === 'miles' ? milesToKm(parseFloat(running) || 0) : (parseFloat(running) || 0),
+  )
+
   useEffect(() => {
-    const swim = parseFloat(swimming) || 0
-    const bike = parseFloat(biking) || 0
-    const run = parseFloat(running) || 0
-    const bikeKm = unit === 'miles' ? milesToKm(bike) : bike
-    const runKm = unit === 'miles' ? milesToKm(run) : run
-    setScore(calcScore(swim, bikeKm, runKm))
-  }, [swimming, biking, running, unit])
+    async function load() {
+      const snap = await getDoc(doc(db, 'sessions', id))
+      if (!snap.exists()) { setLoading(false); return }
+      const data = snap.data()
+      const s = { id: snap.id, ...data, createdAt: timestampToDate(data.createdAt) } as Session
+      setSession(s)
+      setSessionDate(s.sessionDate)
+      setSwimming(String(s.swimmingMeters))
+      setBiking(String(s.bikingKm))
+      setRunning(String(s.runningKm))
+      setSwimmingMins(s.swimmingMins ? String(s.swimmingMins) : '10')
+      setBikingMins(s.bikingMins ? String(s.bikingMins) : '25')
+      setRunningMins(s.runningMins ? String(s.runningMins) : '15')
+      setLoading(false)
+    }
+    load()
+  }, [id])
 
   async function handleSave() {
-    if (!user) return
+    if (!session) return
     setSaving(true)
     setError('')
-
     try {
       const swim = parseFloat(swimming) || 0
-      const bike = parseFloat(biking) || 0
-      const run = parseFloat(running) || 0
-      const bikeKm = unit === 'miles' ? milesToKm(bike) : bike
-      const runKm = unit === 'miles' ? milesToKm(run) : run
-
-      const sessionsRef = collection(db, 'sessions')
-      const sessionDoc = await addDoc(sessionsRef, {
-        userId: user.uid,
-        userName: user.name,
+      const bikeKm = unit === 'miles' ? milesToKm(parseFloat(biking) || 0) : (parseFloat(biking) || 0)
+      const runKm = unit === 'miles' ? milesToKm(parseFloat(running) || 0) : (parseFloat(running) || 0)
+      await updateDoc(doc(db, 'sessions', id), {
+        sessionDate,
         swimmingMeters: swim,
         bikingKm: bikeKm,
         runningKm: runKm,
@@ -57,31 +71,28 @@ export function ScoreForm() {
         bikingMins: parseFloat(bikingMins) || 0,
         runningMins: parseFloat(runningMins) || 0,
         score: calcScore(swim, bikeKm, runKm),
-        sessionDate: sessionDate,
-        createdAt: serverTimestamp(),
       })
-
-      router.push(`/session/${sessionDoc.id}`)
+      router.push(`/session/${id}`)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save session')
+      setError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
   }
 
+  if (loading) return <div className="p-6 text-center text-gray-400">Loading…</div>
+  if (!session) return <div className="p-6 text-center text-gray-400">Session not found</div>
+
+  // Only allow editing your own sessions
+  if (user && session.userId !== user.uid) {
+    return <div className="p-6 text-center text-gray-400">You can only edit your own sessions</div>
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-md mx-auto">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Triathlon Tracker</h1>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">{user?.name}</span>
-          <button
-            onClick={signOut}
-            className="text-xs text-gray-400 underline"
-          >
-            Sign out
-          </button>
-        </div>
+      <div className="flex items-center gap-2">
+        <button onClick={() => router.back()} className="text-sm text-gray-400">← Back</button>
+        <h1 className="text-xl font-bold flex-1 text-center">Edit Session</h1>
       </div>
 
       {/* Date picker */}
@@ -90,16 +101,24 @@ export function ScoreForm() {
         <input
           type="date"
           value={sessionDate}
-          onChange={(e) => setSessionDate(e.target.value)}
-          max={new Date().toISOString().split('T')[0]}
+          onChange={e => setSessionDate(e.target.value)}
           className="h-12 rounded-md border border-input bg-background px-3 py-2 text-base"
         />
       </div>
 
-      {/* Unit toggle — applies to biking & running */}
+      {/* Unit toggle */}
       <div className="flex items-center justify-end gap-2">
         <span className="text-sm text-gray-500">Unit:</span>
-        <UnitToggle value={unit} onChange={setUnit} />
+        <UnitToggle value={unit} onChange={(u) => {
+          if (u === 'miles') {
+            setBiking(v => v ? String(kmToMiles(parseFloat(v))) : v)
+            setRunning(v => v ? String(kmToMiles(parseFloat(v))) : v)
+          } else {
+            setBiking(v => v ? String(milesToKm(parseFloat(v))) : v)
+            setRunning(v => v ? String(milesToKm(parseFloat(v))) : v)
+          }
+          setUnit(u)
+        }} />
       </div>
 
       {/* Swimming */}
@@ -111,7 +130,7 @@ export function ScoreForm() {
             inputMode="numeric"
             placeholder="0"
             value={swimming}
-            onChange={(e) => setSwimming(e.target.value)}
+            onChange={e => setSwimming(e.target.value)}
             className="h-12 text-base flex-1"
           />
           <span className="text-sm text-gray-500 w-14">meters</span>
@@ -120,7 +139,7 @@ export function ScoreForm() {
             inputMode="numeric"
             placeholder="0"
             value={swimmingMins}
-            onChange={(e) => setSwimmingMins(e.target.value)}
+            onChange={e => setSwimmingMins(e.target.value)}
             className="h-12 text-base w-20"
           />
           <span className="text-sm text-gray-500 w-8">min</span>
@@ -136,7 +155,7 @@ export function ScoreForm() {
             inputMode="decimal"
             placeholder="0"
             value={biking}
-            onChange={(e) => setBiking(e.target.value)}
+            onChange={e => setBiking(e.target.value)}
             className="h-12 text-base flex-1"
           />
           <span className="text-sm text-gray-500 w-14">{unit}</span>
@@ -145,7 +164,7 @@ export function ScoreForm() {
             inputMode="numeric"
             placeholder="0"
             value={bikingMins}
-            onChange={(e) => setBikingMins(e.target.value)}
+            onChange={e => setBikingMins(e.target.value)}
             className="h-12 text-base w-20"
           />
           <span className="text-sm text-gray-500 w-8">min</span>
@@ -161,7 +180,7 @@ export function ScoreForm() {
             inputMode="decimal"
             placeholder="0"
             value={running}
-            onChange={(e) => setRunning(e.target.value)}
+            onChange={e => setRunning(e.target.value)}
             className="h-12 text-base flex-1"
           />
           <span className="text-sm text-gray-500 w-14">{unit}</span>
@@ -170,37 +189,24 @@ export function ScoreForm() {
             inputMode="numeric"
             placeholder="0"
             value={runningMins}
-            onChange={(e) => setRunningMins(e.target.value)}
+            onChange={e => setRunningMins(e.target.value)}
             className="h-12 text-base w-20"
           />
           <span className="text-sm text-gray-500 w-8">min</span>
         </div>
       </div>
 
-      {/* Score display */}
+      {/* Score preview */}
       <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4 border border-gray-200">
-        <span className="text-base font-medium text-gray-700">Your score</span>
+        <span className="text-base font-medium text-gray-700">Score</span>
         <span className="text-2xl font-bold text-blue-600">{formatScore(score)}</span>
       </div>
 
       {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-      <Button
-        onClick={handleSave}
-        disabled={saving}
-        className="h-12 text-base font-semibold"
-      >
-        {saving ? 'Saving…' : 'Save Session'}
+      <Button onClick={handleSave} disabled={saving} className="h-12 text-base font-semibold">
+        {saving ? 'Saving…' : 'Save Changes'}
       </Button>
-
-      <button
-        type="button"
-        onClick={() => router.push(`/profile/${encodeURIComponent(user?.name || '')}`)}
-        className="text-sm text-blue-600 text-center underline"
-        disabled={!user?.name}
-      >
-        View my profile →
-      </button>
     </div>
   )
 }
