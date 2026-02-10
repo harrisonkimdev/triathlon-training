@@ -1,74 +1,79 @@
-import Link from 'next/link'
 import { db, timestampToDate } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
-import { formatScore } from '@/lib/scoring'
+import LeaderboardClient from '@/components/LeaderboardClient'
+
+function getWeekBounds(): { start: Date; end: Date } {
+  const now = new Date()
+  const day = now.getDay() // 0=Sun, 1=Mon, ...
+  const sunday = new Date(now)
+  sunday.setHours(0, 0, 0, 0)
+  sunday.setDate(now.getDate() - day)
+
+  const saturday = new Date(sunday)
+  saturday.setDate(sunday.getDate() + 6)
+  saturday.setHours(23, 59, 59, 999)
+
+  return { start: sunday, end: saturday }
+}
 
 export default async function LeaderboardPage() {
-  // Optimization: Get all sessions in one query instead of N+1
   const sessionsRef = collection(db, 'sessions')
   const sessionsSnapshot = await getDocs(sessionsRef)
 
-  // Group sessions by user
+  const { start: weekStart, end: weekEnd } = getWeekBounds()
+
+  // Group all sessions by user
   const userSessionsMap = new Map<string, any[]>()
 
   sessionsSnapshot.docs.forEach((doc) => {
-    const sessionData = doc.data()
-    const userId = sessionData.userId
-    const userName = sessionData.userName
-
+    const data = doc.data()
+    const userId = data.userId
     if (!userSessionsMap.has(userId)) {
       userSessionsMap.set(userId, [])
     }
-
     userSessionsMap.get(userId)!.push({
       id: doc.id,
-      ...sessionData,
-      createdAt: timestampToDate(sessionData.createdAt),
+      ...data,
+      createdAt: timestampToDate(data.createdAt),
     })
   })
 
-  // Calculate stats per user
   const userStats = Array.from(userSessionsMap.entries()).map(([userId, sessions]) => {
-    const bestScore = Math.max(...sessions.map((s) => s.score), 0)
-    const totalScore = sessions.reduce((a, s) => a + s.score, 0)
-    const count = sessions.length
     const userName = sessions[0]?.userName || 'Unknown'
 
-    return { id: userId, name: userName, bestScore, totalScore, count }
+    // Weekly sessions (by sessionDate string YYYY-MM-DD)
+    const weeklySessions = sessions.filter((s) => {
+      const d = new Date(s.sessionDate)
+      return d >= weekStart && d <= weekEnd
+    })
+    const weeklyScore = weeklySessions.reduce((a, s) => a + (s.score ?? 0), 0)
+
+    // All-time aggregates
+    const totalMins = sessions.reduce((a, s) => {
+      return a + (s.swimmingMins ?? 0) + (s.bikingMins ?? 0) + (s.runningMins ?? 0)
+    }, 0)
+
+    // Total distance: swimming (m→km) + biking (km) + running (km)
+    const totalDistanceKm = sessions.reduce((a, s) => {
+      return a + (s.swimmingMeters ?? 0) / 1000 + (s.bikingKm ?? 0) + (s.runningKm ?? 0)
+    }, 0)
+
+    // Longest single activity (in minutes)
+    const longestActivityMins = sessions.reduce((max, s) => {
+      const sessionMins = (s.swimmingMins ?? 0) + (s.bikingMins ?? 0) + (s.runningMins ?? 0)
+      return Math.max(max, sessionMins)
+    }, 0)
+
+    return {
+      id: userId,
+      name: userName,
+      weeklyScore,
+      totalMins,
+      totalDistanceKm,
+      longestActivityMins,
+      sessionCount: sessions.length,
+    }
   })
 
-  const ranked = userStats.sort((a, b) => b.bestScore - a.bestScore)
-
-  return (
-    <div className="max-w-md mx-auto p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Leaderboard</h1>
-        <Link href="/" className="text-sm text-blue-600 underline">Home</Link>
-      </div>
-
-      <div className="space-y-2">
-        {ranked.map((user, i) => (
-          <Link key={user.id} href={`/profile/${encodeURIComponent(user.name)}`}>
-            <div className="flex items-center gap-3 border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
-              <span className="text-2xl font-bold text-gray-300 w-8">
-                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-              </span>
-              <div className="flex-1">
-                <div className="font-semibold">{user.name}</div>
-                <div className="text-xs text-gray-500">{user.count} sessions</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-gray-400">Best Score</div>
-                <div className="text-lg font-bold text-blue-600">{formatScore(user.bestScore)}</div>
-              </div>
-            </div>
-          </Link>
-        ))}
-
-        {ranked.length === 0 && (
-          <p className="text-center text-gray-400 py-8">No sessions recorded yet</p>
-        )}
-      </div>
-    </div>
-  )
+  return <LeaderboardClient users={userStats} />
 }
