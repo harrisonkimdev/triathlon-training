@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db, timestampToDate } from '@/lib/firebase'
 import type { Session } from '@/lib/firebase'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,8 @@ export default function EditSessionPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [error, setError] = useState('')
 
   const [sessionDate, setSessionDate] = useState('')
@@ -56,6 +58,8 @@ export default function EditSessionPage() {
 
   async function handleSave() {
     if (!session) return
+    if (!user) { setError('You must be logged in to edit sessions'); return }
+    if (session.userId !== user.uid) { setError('You can only edit your own sessions'); return }
     setSaving(true)
     setError('')
     try {
@@ -77,6 +81,20 @@ export default function EditSessionPage() {
       setError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!session) return
+    setDeleting(true)
+    setError('')
+    try {
+      await deleteDoc(doc(db, 'sessions', id))
+      router.push(`/profile/${encodeURIComponent(session.userName)}`)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to delete')
+      setDeleting(false)
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -204,9 +222,41 @@ export default function EditSessionPage() {
 
       {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-      <Button onClick={handleSave} disabled={saving} className="h-12 text-base font-semibold">
+      <Button onClick={handleSave} disabled={saving || deleting} className="h-12 text-base font-semibold">
         {saving ? 'Saving…' : 'Save Changes'}
       </Button>
+
+      <button
+        onClick={() => setShowDeleteConfirm(true)}
+        disabled={saving || deleting}
+        className="w-full h-12 border border-red-200 text-red-500 rounded-lg text-base font-medium hover:bg-red-50 disabled:opacity-50"
+      >
+        Delete Session
+      </button>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4">
+            <h2 className="text-lg font-bold text-center">Delete Session?</h2>
+            <p className="text-sm text-gray-500 text-center">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 h-12 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 h-12 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
