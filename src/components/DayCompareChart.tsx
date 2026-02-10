@@ -58,7 +58,7 @@ export function DayCompareChart({ sessions, selectedDate }: DayCompareChartProps
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v.toLocaleString()} />
-          <Tooltip formatter={(v: number) => [formatScore(v), '']} />
+          <Tooltip formatter={(v: number | string) => [formatScore(Number(v)), '']} />
           {users.length > 1 && <Legend />}
           {users.map((user, i) => (
             <Line
