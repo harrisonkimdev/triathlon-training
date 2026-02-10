@@ -59,7 +59,7 @@ export function DayCompareChart({ sessions, selectedDate }: DayCompareChartProps
           <XAxis dataKey="date" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v.toLocaleString()} />
           <Tooltip formatter={(v: number) => [formatScore(v), '']} />
-          <Legend />
+          {users.length > 1 && <Legend />}
           {users.map((user, i) => (
             <Line
               key={user}

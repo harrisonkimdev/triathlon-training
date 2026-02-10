@@ -72,6 +72,7 @@ export default async function LeaderboardPage() {
       totalDistanceKm,
       longestActivityMins,
       sessionCount: sessions.length,
+      weeklySessionCount: weeklySessions.length,
     }
   })
 

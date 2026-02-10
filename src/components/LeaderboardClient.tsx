@@ -12,6 +12,7 @@ type UserStat = {
   totalDistanceKm: number
   longestActivityMins: number
   sessionCount: number
+  weeklySessionCount: number
 }
 
 type Tab = 'score' | 'time' | 'distance' | 'longest'
@@ -138,7 +139,9 @@ export default function LeaderboardClient({ users }: { users: UserStat[] }) {
                 </span>
                 <div className="flex-1">
                   <div className="font-semibold">{user.name}</div>
-                  <div className="text-xs text-gray-500">{user.sessionCount} sessions</div>
+                  <div className="text-xs text-gray-500">
+                    {tab === 'score' ? user.weeklySessionCount : user.sessionCount} sessions
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-400">{label}</div>
