@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import { BottomNav } from '@/components/BottomNav'
+import { AuthProvider } from '@/context/AuthContext'
+import { AuthGuard } from '@/components/AuthGuard'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
@@ -27,9 +29,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geist.className} antialiased bg-white`}>
-          <div className="pb-16">{children}</div>
+        <AuthProvider>
+          <AuthGuard>
+            <div className="pb-16">{children}</div>
+          </AuthGuard>
           <BottomNav />
-        </body>
+        </AuthProvider>
+      </body>
     </html>
   )
 }
